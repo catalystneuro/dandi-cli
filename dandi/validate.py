@@ -91,13 +91,8 @@ def validate_dandi_nwb(filepath, schema_version=None):
         from .metadata import nwb2asset
         from .models import BareAssetMeta
 
-        try:
-            asset = nwb2asset(filepath, digest="dummy_value", digest_type="sha1")
-            BareAssetMeta(**asset.dict())
-        except ValidationError as e:
-            return [str(e)]
-        except Exception as e:
-            return [f"Failed to read metadata: {e}"]
+        asset = nwb2asset(filepath, digest="dummy_value", digest_type="sha1")
+        BareAssetMeta(**asset.dict())
         return []
     else:
         # make sure that we have some basic metadata fields we require
