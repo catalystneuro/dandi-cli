@@ -328,6 +328,7 @@ def nwb2asset(nwb_path, digest=None, digest_type=None):
             ],
             startedAt=start_time,
             endedAt=end_time,
+            schemaKey="Activity",
         )
     )
     return asset
