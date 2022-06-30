@@ -320,7 +320,9 @@ def rename_nwb_external_files(metadata: List[dict], dandiset_path: str) -> None:
 
 
 @validate_cache.memoize_path
-def validate(path: Union[str, Path], devel_debug: bool = False) -> List[str]:
+def validate(
+    path: Union[str, Path], use_cached_namespaces=True, devel_debug: bool = True
+) -> List[str]:
     """Run validation on a file and return errors
 
     In case of an exception being thrown, an error message added to the
@@ -333,8 +335,13 @@ def validate(path: Union[str, Path], devel_debug: bool = False) -> List[str]:
     path = str(path)  # Might come in as pathlib's PATH
     errors: List[str]
     try:
-        with pynwb.NWBHDF5IO(path, "r", load_namespaces=True) as reader:
-            errors = pynwb.validate(reader)
+        if use_cached_namespaces:
+            from pynwb.validate import validate_cli
+
+            errors = validate_cli(path=path)
+        else:
+            with pynwb.NWBHDF5IO(path, "r", load_namespaces=True) as reader:
+                errors = pynwb.validate(reader)
         lgr.warning(
             "pynwb validation errors for %s: %s",
             path,
