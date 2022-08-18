@@ -12,12 +12,15 @@ import re
 from threading import Lock
 from typing import Any, BinaryIO, Generic, Optional
 from xml.etree.ElementTree import fromstring
+import json
+from packaging import version
 
 from dandischema.digests.dandietag import DandiETag
 from dandischema.models import BareAsset, CommonModel
 from dandischema.models import Dandiset as DandisetMeta
 from dandischema.models import get_schema_version
 from nwbinspector import Importance, inspect_nwb, load_config
+from nwbinspector.utils import get_package_version
 from pydantic import ValidationError
 import requests
 
@@ -453,6 +456,13 @@ class NWBAsset(LocalFileAsset):
         metadata.path = self.path
         return metadata
 
+    def _check_latest_inspector_version(self):
+        url = "https://pypi.org/pypi/nwbinspector/json"
+        data = json.loads(requests.get(url=url).text)
+        versions = data["releases"].keys()
+        max_version = max(versions, key=lambda x: version.Version(x))
+        return get_package_version(package_name="nwbinspector") == max_version
+
     # TODO: @validate_cache.memoize_path
     def get_validation_errors(
         self,
@@ -469,6 +479,15 @@ class NWBAsset(LocalFileAsset):
         else:
             # make sure that we have some basic metadata fields we require
             try:
+                # Ensure latest version of NWB Inspector is installed and used client-side
+                is_latest = self._check_latest_inspector_version()
+                if not is_latest:
+                    errors.extend(
+                        ["Please use the latest release of the NWB Inspector when performing `dandi validate`."]
+                    )
+                    return errors
+
+                # Run NWB Inspector with 'dandi' config - CRITICAL errors and above are equivalent to validation errors
                 errors.extend(
                     [
                         error.message
