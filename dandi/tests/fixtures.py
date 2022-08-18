@@ -8,7 +8,6 @@ from pathlib import Path
 import re
 import shutil
 from subprocess import DEVNULL, check_output, run
-import sys
 import tempfile
 from time import sleep
 from typing import TYPE_CHECKING, Any, Callable, Dict, Iterator, List, Optional, Union
@@ -38,6 +37,32 @@ from ..pynwb_utils import make_nwb_file, metadata_nwb_file_fields
 from ..upload import upload
 
 lgr = get_logger()
+
+
+def copytree(src, dst, symlinks=False, ignore=None):
+    """Function mimicking `shutil.copytree()` behaviour but supporting existing target
+    directories.
+
+    Notes
+    -----
+    * This function can be removed and replaced by a call to `shutil.copytree()`
+        setting the `dirs_exist_ok` keyword argument to true, whenever Python 3.7
+        is no longer supported.
+
+    References
+    ----------
+    https://docs.python.org/3/whatsnew/3.8.html#shutil
+    """
+    if not os.path.exists(dst):
+        os.makedirs(dst)
+    for item in os.listdir(src):
+        s = os.path.join(src, item)
+        d = os.path.join(dst, item)
+        if os.path.isdir(s):
+            copytree(s, d, symlinks, ignore)
+        else:
+            if not os.path.exists(d) or os.stat(s).st_mtime - os.stat(d).st_mtime > 1:
+                shutil.copy2(s, d)
 
 
 @pytest.fixture(autouse=True)
@@ -153,10 +178,7 @@ def organized_nwb_dir2(
 
 
 if TYPE_CHECKING:
-    if sys.version_info >= (3, 8):
-        from typing import Literal
-    else:
-        from typing_extensions import Literal
+    from ..support.typing import Literal
 
     Scope = Union[
         Literal["session"],
@@ -280,7 +302,7 @@ def docker_compose_setup() -> Iterator[Dict[str, str]]:
 
         if create:
             run(
-                ["docker-compose", "up", "-d", "django", "celery", "redirector"],
+                ["docker-compose", "up", "-d", "django", "celery"],
                 cwd=str(LOCAL_DOCKER_DIR),
                 env=env,
                 check=True,
@@ -412,6 +434,27 @@ def zarr_dandiset(new_dandiset: SampleDandiset) -> SampleDandiset:
 
 
 @pytest.fixture()
+def bids_dandiset(new_dandiset: SampleDandiset, bids_examples: str) -> SampleDandiset:
+    copytree(
+        os.path.join(bids_examples, "asl003"),
+        str(new_dandiset.dspath) + "/",
+    )
+    (new_dandiset.dspath / "CHANGES").write_text("0.1.0 2014-11-03\n")
+    return new_dandiset
+
+
+@pytest.fixture()
+def bids_dandiset_invalid(
+    new_dandiset: SampleDandiset, bids_examples: str
+) -> SampleDandiset:
+    copytree(
+        os.path.join(bids_examples, "invalid_pet001"),
+        str(new_dandiset.dspath) + "/",
+    )
+    return new_dandiset
+
+
+@pytest.fixture()
 def video_files(tmp_path):
     video_paths = []
     import cv2
@@ -478,7 +521,7 @@ def _create_nwb_files(video_list):
             name=f"MouseWhiskers{no}",
             format="external",
             external_file=[str(vid_1), str(vid_2)],
-            starting_frame=[0],
+            starting_frame=[0, 2],
             starting_time=0.0,
             rate=150.0,
         )

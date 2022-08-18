@@ -4,65 +4,54 @@ import os
 import click
 
 from .base import devel_debug_option, devel_option, lgr, map_to_click_exceptions
-from ..utils import pluralize
 
 
 @click.command()
-@devel_option(
+@click.option(
     "--schema", help="Validate against new BIDS schema version", metavar="VERSION"
 )
-@click.option("--report", help="Specify path to write a report under.")
 @click.option(
-    "--report-flag",
+    "--report-path",
+    help="Write report under path, this option implies `--report/-r`.",
+)
+@click.option(
+    "--report",
     "-r",
     is_flag=True,
-    help="Whether to write a report under a unique path in the current directory. "
-    "Only usable if `--report` is not already used.",
+    help="Whether to write a report under a unique path in the DANDI log directory.",
 )
 @click.argument("paths", nargs=-1, type=click.Path(exists=True, dir_okay=True))
 @devel_debug_option()
 @map_to_click_exceptions
 def validate_bids(
-    paths, schema=None, devel_debug=False, report=False, report_flag=False
+    paths,
+    schema,
+    report,
+    report_path,
+    devel_debug=False,
 ):
-    """Validate BIDS paths."""
+    """Validate BIDS paths.
+
+    Notes
+    -----
+    Used from bash, eg:
+        dandi validate-bids /my/path
+    """
+
+    from ..bids_utils import is_valid, report_errors
     from ..validate import validate_bids as validate_bids_
 
-    if report_flag and not report:
-        report = report_flag
-
-    validation_result = validate_bids_(
+    validator_result = validate_bids_(
         *paths,
         report=report,
+        report_path=report_path,
         schema_version=schema,
         devel_debug=devel_debug,
     )
-    missing_files = [
-        pattern["regex"]
-        for pattern in validation_result["schema_tracking"]
-        if pattern["mandatory"]
-    ]
-    error_list = []
-    if missing_files:
-        error_substring = (
-            f"{pluralize(len(missing_files), 'filename pattern')} required "
-            "by BIDS could not be found"
-        )
-        error_list.append(error_substring)
-    if validation_result["path_tracking"]:
-        error_substring = (
-            f"{pluralize(len(validation_result['path_tracking']), 'filename')} "
-            "did not match any pattern known to BIDS"
-        )
-        error_list.append(error_substring)
-    if error_list:
-        error_string = " and ".join(error_list)
-        error_string = f"Summary: {error_string}."
-        click.secho(
-            error_string,
-            bold=True,
-            fg="red",
-        )
+    valid = is_valid(validator_result)
+    report_errors(validator_result)
+
+    if not valid:
         raise SystemExit(1)
 
 

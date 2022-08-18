@@ -181,6 +181,52 @@ def test_upload_sync_folder(
         text_dandiset.dandiset.get_asset_by_path("subdir2/banana.txt")
 
 
+def test_upload_bids_invalid(
+    mocker: MockerFixture, bids_dandiset_invalid: SampleDandiset
+) -> None:
+    iter_upload_spy = mocker.spy(LocalFileAsset, "iter_upload")
+    bids_dandiset_invalid.upload(existing="force")
+    iter_upload_spy.assert_not_called()
+    # Does validation ignoring work?
+    bids_dandiset_invalid.upload(existing="force", validation="ignore")
+    iter_upload_spy.assert_called()
+    # Check existence of assets:
+    dandiset = bids_dandiset_invalid.dandiset
+    dandiset.get_asset_by_path("dataset_description.json")
+
+
+def test_upload_bids_validation_ignore(
+    mocker: MockerFixture, bids_dandiset: SampleDandiset
+) -> None:
+    iter_upload_spy = mocker.spy(LocalFileAsset, "iter_upload")
+    bids_dandiset.upload(existing="force", validation="ignore")
+    # Check whether upload was run
+    iter_upload_spy.assert_called()
+    # Check existence of assets:
+    dandiset = bids_dandiset.dandiset
+    # file we created?
+    dandiset.get_asset_by_path("CHANGES")
+    # BIDS descriptor file?
+    dandiset.get_asset_by_path("dataset_description.json")
+    # actual data file?
+    dandiset.get_asset_by_path("sub-Sub1/anat/sub-Sub1_T1w.nii.gz")
+
+
+def test_upload_bids(mocker: MockerFixture, bids_dandiset: SampleDandiset) -> None:
+    iter_upload_spy = mocker.spy(LocalFileAsset, "iter_upload")
+    bids_dandiset.upload(existing="force")
+    # Check whether upload was run
+    iter_upload_spy.assert_called()
+    # Check existence of assets:
+    dandiset = bids_dandiset.dandiset
+    # file we created?
+    dandiset.get_asset_by_path("CHANGES")
+    # BIDS descriptor file?
+    dandiset.get_asset_by_path("dataset_description.json")
+    # actual data file?
+    dandiset.get_asset_by_path("sub-Sub1/anat/sub-Sub1_T1w.nii.gz")
+
+
 def test_upload_sync_zarr(mocker, zarr_dandiset):
     rmtree(zarr_dandiset.dspath / "sample.zarr")
     zarr.save(zarr_dandiset.dspath / "identity.zarr", np.eye(5))
@@ -219,6 +265,8 @@ def test_upload_zarr(new_dandiset: SampleDandiset) -> None:
     assert isinstance(asset, RemoteZarrAsset)
     assert asset.asset_type is AssetType.ZARR
     assert asset.path == "sample.zarr"
+    # Test that uploading again without any changes works:
+    new_dandiset.upload()
 
 
 def test_upload_different_zarr(tmp_path: Path, zarr_dandiset: SampleDandiset) -> None:

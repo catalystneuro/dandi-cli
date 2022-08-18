@@ -216,16 +216,17 @@ class LocalizedMover(Mover):
         Given a sequence of input source paths and a destination path, return a
         sorted list of all assets that will be moved/renamed
         """
+        destpath, dest_is_dir = self.resolve(dest)
         destobj: File | Folder | None
         try:
             destobj = self.get_path(dest, is_src=False)
         except NotFoundError:
-            if dest.endswith("/") or len(srcs) > 1:
-                destobj = Folder(dest, [])
+            if dest_is_dir or len(srcs) > 1:
+                destobj = Folder(destpath, [])
             elif len(srcs) == 1:
                 destobj = None
             else:
-                destobj = File(AssetPath(dest))
+                destobj = File(destpath)
         if isinstance(destobj, File) and len(srcs) > 1:
             raise ValueError(
                 "Cannot take multiple source paths when destination is a file"
@@ -234,9 +235,9 @@ class LocalizedMover(Mover):
         for s in map(self.get_path, srcs):
             if destobj is None:
                 if isinstance(s, File):
-                    destobj = File(AssetPath(dest))
+                    destobj = File(destpath)
                 else:
-                    destobj = Folder(dest, [])
+                    destobj = Folder(destpath, [])
             if isinstance(s, File):
                 if isinstance(destobj, File):
                     pdest = AssetPath(destobj.path)
@@ -714,30 +715,33 @@ class LocalRemoteMover(Mover):
         any differences.
         """
         # Recall that the Movements are sorted by src path
+        mismatches = []
         for lm, rm in zip_longest(local_moves, remote_moves):
             if rm is None:
-                raise AssetMismatchError(f"asset {lm.src!r} only exists locally")
+                mismatches.append(f"Asset {lm.src!r} only exists locally")
             elif lm is None:
-                raise AssetMismatchError(f"asset {rm.src!r} only exists remotely")
+                mismatches.append(f"Asset {rm.src!r} only exists remotely")
             elif lm.src < rm.src:
-                raise AssetMismatchError(f"asset {lm.src!r} only exists locally")
+                mismatches.append(f"Asset {lm.src!r} only exists locally")
             elif lm.src > rm.src:
-                raise AssetMismatchError(f"asset {rm.src!r} only exists remotely")
+                mismatches.append(f"Asset {rm.src!r} only exists remotely")
             elif lm.dest != rm.dest:
-                raise AssetMismatchError(
-                    f"asset {lm.src!r} would be moved to {lm.dest!r} locally"
+                mismatches.append(
+                    f"Asset {lm.src!r} would be moved to {lm.dest!r} locally"
                     f" but to {rm.dest!r} remotely"
                 )
             elif lm.dest_exists and not rm.dest_exists:
-                raise AssetMismatchError(
-                    f"asset {lm.src!r} would be moved to {lm.dest!r}, which"
+                mismatches.append(
+                    f"Asset {lm.src!r} would be moved to {lm.dest!r}, which"
                     " exists locally but not remotely"
                 )
             elif not lm.dest_exists and rm.dest_exists:
-                raise AssetMismatchError(
-                    f"asset {lm.src!r} would be moved to {lm.dest!r}, which"
+                mismatches.append(
+                    f"Asset {lm.src!r} would be moved to {lm.dest!r}, which"
                     " exists remotely but not locally"
                 )
+        if mismatches:
+            raise AssetMismatchError(mismatches)
 
     def process_movement(
         self, m: Movement, dry_run: bool = False
@@ -862,8 +866,10 @@ def find_dandiset_and_subpath(path: Path) -> tuple[Dandiset, Path]:
 
 
 class AssetMismatchError(ValueError):
-    def __init__(self, msg: str) -> None:
-        self.msg = msg
+    def __init__(self, mismatches: list[str]) -> None:
+        self.mismatches = mismatches
 
     def __str__(self) -> str:
-        return f"Mismatch between local and remote servers: {self.msg}"
+        return "Mismatch between local and remote Dandisets:\n" + "\n".join(
+            f"- {msg}" for msg in self.mismatches
+        )

@@ -141,6 +141,7 @@ class RESTFullAPIClient:
         headers: Optional[dict] = None,
         json_resp: bool = True,
         retry_statuses: Sequence[int] = (),
+        retry_if: Optional[Callable[[requests.Response], Any]] = None,
         **kwargs: Any,
     ) -> Any:
         """
@@ -184,6 +185,8 @@ class RESTFullAPIClient:
         :type json_resp: bool
         :param retry_statuses: a sequence of HTTP response status codes to
             retry in addition to `dandi.consts.RETRY_STATUSES`
+        :param retry_if: an optional predicate applied to a failed HTTP
+            response to test whether to retry
         """
 
         url = self.get_url(path)
@@ -223,7 +226,9 @@ class RESTFullAPIClient:
                         headers=headers,
                         **kwargs,
                     )
-                    if result.status_code in [*RETRY_STATUSES, *retry_statuses]:
+                    if result.status_code in [*RETRY_STATUSES, *retry_statuses] or (
+                        retry_if is not None and retry_if(result)
+                    ):
                         result.raise_for_status()
         except Exception:
             lgr.exception("HTTP connection failed")
@@ -1015,6 +1020,31 @@ class RemoteDandiset:
             for a in self.client.paginate(
                 f"{self.version_api_path}assets/",
                 params={"path": path, "order": order},
+            ):
+                yield RemoteAsset.from_data(self, a)
+        except HTTP404Error:
+            raise NotFoundError(
+                f"No such version: {self.version_id!r} of Dandiset {self.identifier}"
+            )
+
+    def get_assets_by_glob(
+        self, pattern: str, order: Optional[str] = None
+    ) -> Iterator["RemoteAsset"]:
+        """
+        .. versionadded:: 0.44.0
+
+        Returns an iterator of all assets in this version of the Dandiset whose
+        `~RemoteAsset.path` attributes match the glob pattern ``pattern``
+
+        Assets can be sorted by a given field by passing the name of that field
+        as the ``order`` parameter.  The accepted field names are
+        ``"created"``, ``"modified"``, and ``"path"``.  Prepend a hyphen to the
+        field name to reverse the sort order.
+        """
+        try:
+            for a in self.client.paginate(
+                f"{self.version_api_path}assets/",
+                params={"glob": pattern, "order": order},
             ):
                 yield RemoteAsset.from_data(self, a)
         except HTTP404Error:

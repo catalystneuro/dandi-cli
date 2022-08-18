@@ -1,4 +1,3 @@
-from copy import deepcopy
 from datetime import datetime, timedelta
 import json
 from pathlib import Path
@@ -7,7 +6,6 @@ from typing import Any, Dict, Optional, Tuple, Union
 from dandischema.consts import DANDI_SCHEMA_VERSION
 from dandischema.metadata import validate
 from dandischema.models import AgeReferenceType
-from dandischema.models import BareAsset as BareAssetMeta
 from dandischema.models import Dandiset as DandisetMeta
 from dandischema.models import PropertyValue
 from dateutil.tz import tzutc
@@ -19,9 +17,9 @@ from ..metadata import (
     extract_age,
     extract_species,
     get_metadata,
-    metadata2asset,
     parse_age,
     parse_purlobourl,
+    prepare_metadata,
     process_ndtypes,
     timedelta2duration,
 )
@@ -92,6 +90,13 @@ def test_get_metadata(simple1_nwb: str, simple1_nwb_metadata: Dict[str, Any]) ->
         ("14 (Units: days)", "P14D"),
         ("14 unit day", "P14D"),
         ("Gestational Week 19", ("P19W", "Gestational")),
+        ("P100D/P200D", "P100D/P200D"),
+        ("P1DT10H/P1DT20H", "P1DT10H/P1DT20H"),
+        ("P1DT10H/P1DT10H20M", "P1DT10H/P1DT10H20M"),
+        ("P100D / P200D ", "P100D/P200D"),
+        ("/P200D", "/P200D"),
+        ("P100D/", "P100D/"),
+        ("/", "/"),
     ],
 )
 def test_parse_age(age: str, duration: Union[str, Tuple[str, str]]) -> None:
@@ -118,14 +123,30 @@ def test_parse_age(age: str, duration: Union[str, Tuple[str, str]]) -> None:
         (" , ", "Age doesn't have any information"),
         ("", "Age is empty"),
         (None, "Age is empty"),
-        (
-            "P2DT10.5H10M",
-            "Decimal fraction allowed in the lowest order part only, but"
-            " 'P2DT10.5H10M' was received",
-        ),
+        ("P2DT10.5H10M", "Decimal fraction allowed in the lowest order part only."),
         (
             "4.5 hours 10 sec",
-            "Decimal fraction allowed in the lowest order part only, but '' was received",
+            "Decimal fraction allowed in the lowest order part only.",
+        ),
+        (
+            "14 /",
+            "Ages that use / for range need to use ISO8601 format, but '14' found.",
+        ),
+        (
+            "P12Y/P10Y",
+            "The upper limit has to be larger than the lower limit, and they should have "
+            "consistent units.",
+        ),
+        (
+            "P12Y2W/P12Y",
+            "The upper limit has to be larger than the lower limit, and they should have "
+            "consistent units.",
+        ),
+        # the upper limit is bigger than lower, but I think we should not allow for this
+        (
+            "P1Y/P500D",
+            "The upper limit has to be larger than the lower limit, and they should have "
+            "consistent units.",
         ),
     ],
 )
@@ -266,14 +287,12 @@ def test_timedelta2duration(td: timedelta, duration: str) -> None:
         ),
     ],
 )
-def test_metadata2asset(filename: str, metadata: Dict[str, Any]) -> None:
-    data = metadata2asset(metadata)
+def test_prepare_metadata(filename: str, metadata: Dict[str, Any]) -> None:
+    data = prepare_metadata(metadata)
     with (METADATA_DIR / filename).open() as fp:
         data_as_dict = json.load(fp)
     data_as_dict["schemaVersion"] = DANDI_SCHEMA_VERSION
-    assert data == BareAssetMeta(**data_as_dict)
-    bare_dict = deepcopy(data_as_dict)
-    assert data.json_dict() == bare_dict
+    assert data == data_as_dict
     data_as_dict["identifier"] = "0b0a1a0b-e3ea-4cf6-be94-e02c830d54be"
     # as of schema-0.5.0 (https://github.com/dandi/dandischema/pull/52)
     # contentUrl is required, and validate below would map into Asset,
@@ -633,17 +652,17 @@ def test_species():
     ],
 )
 def test_ndtypes(ndtypes, asset_dict):
-    asset = BareAssetMeta(
-        contentSize=1,
-        encodingFormat="application/x-nwb",
-        digest={"dandi:dandi-etag": "0" * 32 + "-1"},
-        path="test.nwb",
-    )
-    asset = process_ndtypes(asset, ndtypes)
+    metadata = {
+        "contentSize": 1,
+        "encodingFormat": "application/x-nwb",
+        "digest": {"dandi:dandi-etag": "0" * 32 + "-1"},
+        "path": "test.nwb",
+    }
+    process_ndtypes(metadata, ndtypes)
     for key in ["approach", "measurementTechnique"]:
         if asset_dict.get(key) is None:
-            assert getattr(asset, key) == []
+            assert metadata[key] == []
         else:
-            assert getattr(asset, key)[0].name == asset_dict.get(key)[0]
+            assert metadata[key][0].name == asset_dict.get(key)[0]
     key = "variableMeasured"
-    assert getattr(asset, key)[0].value == asset_dict.get(key)[0]
+    assert metadata[key][0].value == asset_dict.get(key)[0]

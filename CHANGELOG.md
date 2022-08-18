@@ -1,3 +1,150 @@
+# 0.46.1 (Thu Aug 18 2022)
+
+#### 🐛 Bug Fix
+
+- Add support for age range [#1101](https://github.com/dandi/dandi-cli/pull/1101) ([@djarecka](https://github.com/djarecka))
+
+#### 📝 Documentation
+
+- DOC: minor - boost copyright years in the docs [#1106](https://github.com/dandi/dandi-cli/pull/1106) ([@yarikoptic](https://github.com/yarikoptic))
+
+#### 🧪 Tests
+
+- Update test.yml to use ubuntu-latest [#1103](https://github.com/dandi/dandi-cli/pull/1103) ([@jwodder](https://github.com/jwodder))
+
+#### Authors: 3
+
+- Dorota Jarecka ([@djarecka](https://github.com/djarecka))
+- John T. Wodder II ([@jwodder](https://github.com/jwodder))
+- Yaroslav Halchenko ([@yarikoptic](https://github.com/yarikoptic))
+
+---
+
+# 0.46.0 (Thu Aug 18 2022)
+
+#### 🚀 Enhancement
+
+- Add classes for BIDS assets [#1076](https://github.com/dandi/dandi-cli/pull/1076) ([@jwodder](https://github.com/jwodder))
+
+#### 🐛 Bug Fix
+
+- ENH: list localhost:8085 as the web UI for dandi-api-local-docker-tests [#1003](https://github.com/dandi/dandi-cli/pull/1003) ([@yarikoptic](https://github.com/yarikoptic))
+- BF: guard download_generator to not propagate errors [#1008](https://github.com/dandi/dandi-cli/pull/1008) ([@yarikoptic](https://github.com/yarikoptic))
+- User notification if datasets are invalid. [#1080](https://github.com/dandi/dandi-cli/pull/1080) ([@TheChymera](https://github.com/TheChymera))
+- Updating BIDS validator and schema to contemporary upstream equivalent [#1050](https://github.com/dandi/dandi-cli/pull/1050) ([@TheChymera](https://github.com/TheChymera))
+- Support DANDI:<ID>/draft and stop using identifiers.org for any of the DANDI: URIs [#1066](https://github.com/dandi/dandi-cli/pull/1066) ([@yarikoptic](https://github.com/yarikoptic))
+
+#### 🏎 Performance
+
+- Do not traverse .ome.zarr and .ngff folders while looking for BIDS datasets [#1071](https://github.com/dandi/dandi-cli/pull/1071) ([@yarikoptic](https://github.com/yarikoptic))
+
+#### ⚠️ Pushed to `master`
+
+- Update README.md ([@bendichter](https://github.com/bendichter))
+
+#### 🏠 Internal
+
+- Factor out common fields in nwb2asset() and get_default_metadata() [#1088](https://github.com/dandi/dandi-cli/pull/1088) ([@jwodder](https://github.com/jwodder))
+
+#### 📝 Documentation
+
+- Add examples to `dandi move` docs [#1098](https://github.com/dandi/dandi-cli/pull/1098) ([@jwodder](https://github.com/jwodder))
+
+#### 🧪 Tests
+
+- Tell codespell to ignore "bu" strings in tests [#1102](https://github.com/dandi/dandi-cli/pull/1102) ([@jwodder](https://github.com/jwodder))
+- Update video NWB fixtures for next pynwb version [#1100](https://github.com/dandi/dandi-cli/pull/1100) ([@jwodder](https://github.com/jwodder))
+- Remove redirector from Docker Compose setup [#1087](https://github.com/dandi/dandi-cli/pull/1087) ([@jwodder](https://github.com/jwodder))
+
+#### Authors: 4
+
+- Ben Dichter ([@bendichter](https://github.com/bendichter))
+- Horea Christian ([@TheChymera](https://github.com/TheChymera))
+- John T. Wodder II ([@jwodder](https://github.com/jwodder))
+- Yaroslav Halchenko ([@yarikoptic](https://github.com/yarikoptic))
+
+---
+
+# 0.45.1 (Fri Jul 15 2022)
+
+#### 🐛 Bug Fix
+
+- dandi move: Fix resolution of nonexistent dests when in a subdirectory [#1063](https://github.com/dandi/dandi-cli/pull/1063) ([@jwodder](https://github.com/jwodder))
+- dandi move: Include all mismatches in error messages [#1064](https://github.com/dandi/dandi-cli/pull/1064) ([@jwodder](https://github.com/jwodder))
+
+#### 📝 Documentation
+
+- Mention in help text that 'draft' is not supported in DANDI:<dandiset>/<version> [#1062](https://github.com/dandi/dandi-cli/pull/1062) ([@jwodder](https://github.com/jwodder))
+
+#### Authors: 1
+
+- John T. Wodder II ([@jwodder](https://github.com/jwodder))
+
+---
+
+# 0.45.0 (Wed Jul 13 2022)
+
+#### 🚀 Enhancement
+
+- Built-in BIDS support for `dandi upload` [#1011](https://github.com/dandi/dandi-cli/pull/1011) ([@TheChymera](https://github.com/TheChymera))
+
+#### 🐛 Bug Fix
+
+- DOC: describe the purpose for --instance in download [#1053](https://github.com/dandi/dandi-cli/pull/1053) ([@yarikoptic](https://github.com/yarikoptic))
+
+#### 🏠 Internal
+
+- Replace numpy.asscalar() with numpy.ndarray.item() [#1056](https://github.com/dandi/dandi-cli/pull/1056) ([@jwodder](https://github.com/jwodder))
+- Clone entire repo in "Lint" action [#1052](https://github.com/dandi/dandi-cli/pull/1052) ([@jwodder](https://github.com/jwodder))
+
+#### Authors: 3
+
+- Horea Christian ([@TheChymera](https://github.com/TheChymera))
+- John T. Wodder II ([@jwodder](https://github.com/jwodder))
+- Yaroslav Halchenko ([@yarikoptic](https://github.com/yarikoptic))
+
+---
+
+# 0.44.1 (Fri Jul 08 2022)
+
+#### 🐛 Bug Fix
+
+- Retry Zarr entry uploads that fail with "header ... implies functionality ... not implemented" [#1048](https://github.com/dandi/dandi-cli/pull/1048) ([@jwodder](https://github.com/jwodder))
+
+#### Authors: 1
+
+- John T. Wodder II ([@jwodder](https://github.com/jwodder))
+
+---
+
+# 0.44.0 (Fri Jul 08 2022)
+
+#### 🚀 Enhancement
+
+- Add `get_assets_by_glob()` [#981](https://github.com/dandi/dandi-cli/pull/981) ([@jwodder](https://github.com/jwodder))
+
+#### 🐛 Bug Fix
+
+- Don't ingest a Zarr if nothing changed while uploading [#1047](https://github.com/dandi/dandi-cli/pull/1047) ([@jwodder](https://github.com/jwodder))
+
+#### Authors: 1
+
+- John T. Wodder II ([@jwodder](https://github.com/jwodder))
+
+---
+
+# 0.43.0 (Tue Jul 05 2022)
+
+#### 🚀 Enhancement
+
+- Better cancellation of Zarr uploads [#1041](https://github.com/dandi/dandi-cli/pull/1041) ([@jwodder](https://github.com/jwodder))
+
+#### Authors: 1
+
+- John T. Wodder II ([@jwodder](https://github.com/jwodder))
+
+---
+
 # 0.42.0 (Fri Jul 01 2022)
 
 #### 🚀 Enhancement

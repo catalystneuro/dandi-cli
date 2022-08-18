@@ -2,12 +2,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from functools import lru_cache
-import itertools
 import os
 import os.path as op
 from pathlib import Path
 import re
-import sys
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -44,53 +42,12 @@ from .utils import ensure_datetime, get_mime_type, get_utcnow_datetime
 
 lgr = get_logger()
 
-# Remove hard-coding when current version fallback is merged.
-
-BIDS_TO_DANDI = {
-    "subject": "subject_id",
-    "session": "session_id",
-}
-
-
-def _rename_bids_keys(bids_metadata, mapping=BIDS_TO_DANDI):
-    """Standardize BIDS metadata field naming to match DANDI."""
-    return {mapping.get(k, k): v for k, v in bids_metadata.items()}
-
-
-def _path_in_bids(
-    check_path, bids_marker="dataset_description.json", end_marker="dandiset.yaml"
-):
-    """Determine whether a path is a member of a BIDS dataset.
-
-    Parameters
-    ----------
-    check_path: str or Path
-    bids_marker: str, optional
-        String giving a filename, the existence of which in a directory will mark it as a
-        BIDS dataset root directory.
-    end_marker: str, optional
-        String giving a filename, the existence of which in a directory will end the
-        search.
-
-    Returns
-    -------
-    bool
-    """
-    check_path = Path(check_path)
-    for dir_level in itertools.chain([check_path], check_path.parents):
-        bids_marker_candidate = dir_level / bids_marker
-        end_marker_candidate = dir_level / end_marker
-        if bids_marker_candidate.is_file() or bids_marker_candidate.is_symlink():
-            return True
-        if end_marker_candidate.is_file() or end_marker_candidate.is_symlink():
-            return False
-    return False
-
 
 # Disable this for clean hacking
 @metadata_cache.memoize_path
 def get_metadata(path: Union[str, Path]) -> Optional[dict]:
-    """Get selected metadata from a .nwb file or a dandiset directory
+    """
+    Get "flatdata" from a .nwb file or a Dandiset directory
 
     If a directory given and it is not a Dandiset, None is returned
 
@@ -114,18 +71,6 @@ def get_metadata(path: Union[str, Path]) -> Optional[dict]:
         except ValueError as exc:
             lgr.debug("Failed to get metadata for %s: %s", path, exc)
             return None
-
-    # Somewhat less fragile search than previous proposals,
-    # could still be augmented with `_is_nwb` to disambiguate both cases
-    # at the detection level.
-    if _path_in_bids(path):
-        from .bids_validator_xs import validate_bids
-
-        _meta = validate_bids(path)
-        meta = _meta["match_listing"][0]
-        meta["bids_schema_version"] = _meta["bids_schema_version"]
-        meta = _rename_bids_keys(meta)
-        return meta
 
     if nwb_has_external_links(path):
         raise NotImplementedError(
@@ -185,7 +130,22 @@ def _parse_iso8601(age: str) -> List[str]:
     )
     m = re.match(pattern, age, flags=re.I)
     if m:
-        return ["P"] + [m[i] for i in range(1, 6) if m[i]]
+        age_f = ["P"] + [m[i] for i in range(1, 6) if m[i]]
+        # expanding the Time part (todo: can be done already in pattern)
+        if "T" in age_f[-1]:
+            mT = re.match(
+                r"^T(\d+(?:\.\d+)?H)?(\d+(?:\.\d+)?M)?(\d+(?:\.\d+)?S)?",
+                age_f[-1],
+                flags=re.I,
+            )
+            if mT is None:
+                raise ValueError(
+                    f"Failed to parse the trailing part of age {age_f[-1]!r}"
+                )
+            age_f = age_f[:-1] + ["T"] + [mT[i] for i in range(1, 3) if mT[i]]
+        # checking if there are decimal parts in the higher order components
+        _check_decimal_parts(age_f)
+        return age_f
     else:
         raise ValueError(f"ISO 8601 expected, but {age!r} was received")
 
@@ -235,28 +195,60 @@ def _parse_hours_format(age: str) -> Tuple[str, List[str]]:
     """parsing format 0:30:10"""
     m = re.match(r"\s*(\d\d?):(\d\d):(\d\d)", age)
     if m:
-        time_part = f"T{int(m[1])}H{int(m[2])}M{int(m[3])}S"
-        return (age[: m.start()] + age[m.end() :]).strip(), [time_part]
+        time_part = ["T", f"{int(m[1])}H", f"{int(m[2])}M", f"{int(m[3])}S"]
+        return (age[: m.start()] + age[m.end() :]).strip(), time_part
     else:
         return age, []
 
 
-def _check_decimal_parts(age_parts: List[str]) -> bool:
+def _check_decimal_parts(age_parts: List[str]) -> None:
     """checking if decimal parts are only in the lowest order component"""
     # if the last part is the T component I have to separate the parts
-    if "T" in age_parts[-1]:
-        m = re.match(
-            r"^T(\d+(?:\.\d+)?H)?(\d+(?:\.\d+)?M)?(\d+(?:\.\d+)?S)?",
-            age_parts[-1],
-            flags=re.I,
-        )
-        if m is None:
-            raise ValueError(
-                f"Failed to parse the trailing part of age {age_parts[-1]!r}"
-            )
-        age_parts = age_parts[:-1] + [m[i] for i in range(1, 3) if m[i]]
     decim_part = ["." in el for el in age_parts]
-    return not (any(decim_part) and any(decim_part[:-1]))
+    if len(decim_part) > 1 and any(decim_part[:-1]):
+        raise ValueError("Decimal fraction allowed in the lowest order part only.")
+
+
+def _check_range_limits(limits: List[List[str]]) -> None:
+    """checking if the upper limit is bigger than the lower limit"""
+    ok = True
+    units_t = dict(zip(["S", "M", "H"], range(3)))
+    units_d = dict(zip(["D", "W", "M", "Y"], range(4)))
+    lower, upper = limits
+    units_order = units_d
+    for ii, el in enumerate(upper):
+        if ii == len(lower):  # nothing to compare in the lower limit
+            break
+        if el == "T":  # changing to the time-related unit order
+            if lower[ii] != "T":  # lower unit still has
+                ok = False
+                break
+            units_order = units_t
+        elif el == lower[ii]:
+            continue
+        else:  # comparing the first element that differs
+            if el[-1] == lower[ii][-1]:  # the same unit
+                if float(el[:-1]) > float(lower[ii][:-1]):
+                    break
+                elif float(el[:-1]) == float(
+                    lower[ii][:-1]
+                ):  # in case having 2.D and 2D
+                    continue
+                else:
+                    ok = False
+                    break
+            elif units_order[el[-1]] > units_order[lower[ii][-1]]:
+                break
+            else:  # lower limit has higher unit
+                ok = False
+                break
+    if len(lower) > len(upper):  # lower has still more elements
+        ok = False
+    if not ok:
+        raise ValueError(
+            "The upper limit has to be larger than the lower limit, "
+            "and they should have consistent units."
+        )
 
 
 def parse_age(age: Optional[str]) -> Tuple[str, str]:
@@ -285,7 +277,24 @@ def parse_age(age: Optional[str]) -> Tuple[str, str]:
 
     age = age.strip()
 
-    if age.startswith("P"):
+    if "/" in age and len(age.split("/")) == 2:  # age as a range
+        age = age.replace(" ", "")
+        limits = []
+        for el in age.split("/"):
+            if el.startswith("P"):
+                limits.append(_parse_iso8601(el))
+            elif el == "":  # start or end of range is unknown
+                limits.append([""])
+            else:
+                raise ValueError(
+                    f"Ages that use / for range need to use ISO8601 format, "
+                    f"but {el!r} found."
+                )
+        age_f = limits[0] + ["/"] + limits[1]
+        # if both limits provided checking if the upper limit is bigegr than the lower
+        if limits[0][0] and limits[1][0]:
+            _check_range_limits(limits)
+    elif age.startswith("P"):
         age_f = _parse_iso8601(age)
     else:  # trying to figure out any free form
         # removing some symbols
@@ -327,13 +336,9 @@ def parse_age(age: Optional[str]) -> Tuple[str, str]:
             raise ValueError(
                 f"Cannot parse age {age_orig!r}: no rules to convert {age!r}"
             )
+        # checking if there are decimal parts in the higher order components
+        _check_decimal_parts(age_f)
 
-    # checking if there are decimal parts in the higher order components
-    if not _check_decimal_parts(age_f):
-        raise ValueError(
-            f"Decimal fraction allowed in the lowest order part only,"
-            f" but {age!r} was received"
-        )
     return "".join(age_f), ref
 
 
@@ -636,9 +641,7 @@ def extract_session(metadata: dict) -> Optional[List[models.Session]]:
     ]
 
 
-def extract_digest(
-    metadata: dict,
-) -> Optional[Dict[models.DigestType, str]]:
+def extract_digest(metadata: dict) -> Optional[Dict[models.DigestType, str]]:
     if "digest" in metadata:
         return {models.DigestType[metadata["digest_type"]]: metadata["digest"]}
     else:
@@ -666,10 +669,7 @@ def extract_field(field: str, metadata: dict) -> Any:
 
 
 if TYPE_CHECKING:
-    if sys.version_info >= (3, 8):
-        from typing import TypedDict
-    else:
-        from typing_extensions import TypedDict
+    from .support.typing import TypedDict
 
     class Neurodatum(TypedDict):
         module: str
@@ -868,9 +868,7 @@ neurodata_typemap: Dict[str, Neurodatum] = {
 }
 
 
-def process_ndtypes(
-    asset: models.BareAsset, nd_types: Iterable[str]
-) -> models.BareAsset:
+def process_ndtypes(metadata: Dict[str, Any], nd_types: Iterable[str]) -> None:
     approach = set()
     technique = set()
     variables = set()
@@ -883,12 +881,13 @@ def process_ndtypes(
         if neurodata_typemap[val]["technique"]:
             technique.add(neurodata_typemap[val]["technique"])
         variables.add(val)
-    asset.approach = [models.ApproachType(name=val) for val in approach]
-    asset.measurementTechnique = [
+    metadata["approach"] = [models.ApproachType(name=val) for val in approach]
+    metadata["measurementTechnique"] = [
         models.MeasurementTechniqueType(name=val) for val in technique
     ]
-    asset.variableMeasured = [models.PropertyValue(value=val) for val in variables]
-    return asset
+    metadata["variableMeasured"] = [
+        models.PropertyValue(value=val) for val in variables
+    ]
 
 
 def nwb2asset(
@@ -904,48 +903,50 @@ def nwb2asset(
             )
     start_time = datetime.now().astimezone()
     metadata = get_metadata(nwb_path)
-    if digest is not None:
-        metadata["digest"] = digest.value
-        metadata["digest_type"] = digest.algorithm.name
-    metadata["contentSize"] = op.getsize(nwb_path)
-    metadata["encodingFormat"] = "application/x-nwb"
-    metadata["dateModified"] = get_utcnow_datetime()
-    metadata["blobDateModified"] = ensure_datetime(os.stat(nwb_path).st_mtime)
-    metadata["path"] = str(nwb_path)
-    if metadata["blobDateModified"] > metadata["dateModified"]:
-        lgr.warning(
-            "mtime %s of %s is in the future", metadata["blobDateModified"], nwb_path
-        )
-    asset = metadata2asset(metadata)
-    asset = process_ndtypes(asset, metadata["nd_types"])
+    asset_md = prepare_metadata(metadata)
+    process_ndtypes(asset_md, metadata["nd_types"])
     end_time = datetime.now().astimezone()
-    if asset.wasGeneratedBy is None:
-        asset.wasGeneratedBy = []
-    asset.wasGeneratedBy.append(get_generator(start_time, end_time))
-    return asset
+    add_common_metadata(asset_md, nwb_path, start_time, end_time, digest)
+    asset_md["encodingFormat"] = "application/x-nwb"
+    asset_md["path"] = str(nwb_path)
+    return models.BareAsset(**asset_md)
 
 
 def get_default_metadata(
     path: Union[str, Path], digest: Optional[Digest] = None
 ) -> models.BareAsset:
-    start_time = datetime.now().astimezone()
+    metadata: Dict[str, Any] = {}
+    start_time = end_time = datetime.now().astimezone()
+    add_common_metadata(metadata, path, start_time, end_time, digest)
+    return models.BareAsset.unvalidated(**metadata)
+
+
+def add_common_metadata(
+    metadata: Dict[str, Any],
+    path: Union[str, Path],
+    start_time: datetime,
+    end_time: datetime,
+    digest: Optional[Digest] = None,
+) -> None:
+    """
+    Update a `dict` of raw "schemadata" with the fields that are common to both
+    NWB assets and non-NWB assets
+    """
     if digest is not None:
-        digest_model = digest.asdict()
+        metadata["digest"] = digest.asdict()
     else:
-        digest_model = {}
-    dateModified = get_utcnow_datetime()
-    blobDateModified = ensure_datetime(os.stat(path).st_mtime)
-    if blobDateModified > dateModified:
-        lgr.warning("mtime %s of %s is in the future", blobDateModified, path)
-    end_time = datetime.now().astimezone()
-    return models.BareAsset.unvalidated(
-        contentSize=os.path.getsize(path),
-        digest=digest_model,
-        dateModified=dateModified,
-        blobDateModified=blobDateModified,
-        wasGeneratedBy=[get_generator(start_time, end_time)],
-        encodingFormat=get_mime_type(str(path)),
+        metadata["digest"] = {}
+    metadata["dateModified"] = get_utcnow_datetime()
+    metadata["blobDateModified"] = ensure_datetime(os.stat(path).st_mtime)
+    if metadata["blobDateModified"] > metadata["dateModified"]:
+        lgr.warning(
+            "mtime %s of %s is in the future", metadata["blobDateModified"], path
+        )
+    metadata["contentSize"] = os.path.getsize(path)
+    metadata.setdefault("wasGeneratedBy", []).append(
+        get_generator(start_time, end_time)
     )
+    metadata["encodingFormat"] = get_mime_type(str(path))
 
 
 def get_generator(start_time: datetime, end_time: datetime) -> models.Activity:
@@ -967,6 +968,15 @@ def get_generator(start_time: datetime, end_time: datetime) -> models.Activity:
     )
 
 
-def metadata2asset(metadata: dict) -> models.BareAsset:
-    bare_dict = extract_model(models.BareAsset, metadata).json_dict()
-    return models.BareAsset(**bare_dict)
+def prepare_metadata(metadata: dict) -> Dict[str, Any]:
+    """
+    Convert "flatdata" [1]_ for an asset into raw [2]_ "schemadata" [3]_
+
+    .. [1] a flat `dict` mapping strings to strings & other primitive types;
+       returned by `get_metadata()`
+
+    .. [2] i.e, a `dict` rather than a `BareAsset`
+
+    .. [3] metadata in the form used by the ``dandischema`` library
+    """
+    return cast(Dict[str, Any], extract_model(models.BareAsset, metadata).json_dict())
