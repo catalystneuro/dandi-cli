@@ -459,8 +459,8 @@ class NWBAsset(LocalFileAsset):
     def _get_inspector_versions(self):
         url = "https://pypi.org/pypi/nwbinspector/json"
         data = json.loads(requests.get(url=url).text)
-        versions = data["releases"].keys()
-        max_version = max(versions, key=lambda x: version.Version(x))
+        versions = [version.Version(key) for key in data["releases"]]
+        max_version = max(versions)
         current_version = get_package_version(name="nwbinspector")
         return current_version, max_version
 
@@ -485,8 +485,8 @@ class NWBAsset(LocalFileAsset):
                 if current_version != max_version:
                     errors.extend(
                         [
-                            f"NWB Inspector version {current_version} is installed - "
-                            f"please use the latest release of the NWB Inspector ({max_version}) when "
+                            f"NWB Inspector version {current_version} is installed - please "
+                            f"use the latest release of the NWB Inspector ({max_version}) when "
                             "performing `dandi validate`. "
                             "To update, please run `pip install -U nwbinspector`."
                         ]
