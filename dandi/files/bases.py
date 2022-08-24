@@ -456,12 +456,13 @@ class NWBAsset(LocalFileAsset):
         metadata.path = self.path
         return metadata
 
-    def _check_latest_inspector_version(self):
+    def _get_inspector_versions(self):
         url = "https://pypi.org/pypi/nwbinspector/json"
         data = json.loads(requests.get(url=url).text)
         versions = data["releases"].keys()
         max_version = max(versions, key=lambda x: version.Version(x))
-        return get_package_version(name="nwbinspector") == max_version
+        current_version = get_package_version(name="nwbinspector")
+        return current_version, max_version
 
     # TODO: @validate_cache.memoize_path
     def get_validation_errors(
@@ -480,11 +481,12 @@ class NWBAsset(LocalFileAsset):
             # make sure that we have some basic metadata fields we require
             try:
                 # Ensure latest version of NWB Inspector is installed and used client-side
-                is_latest = self._check_latest_inspector_version()
-                if not is_latest:
+                current_version, max_version = self._get_inspector_versions()
+                if current_version != max_version:
                     errors.extend(
                         [
-                            "Please use the latest release of the NWB Inspector when "
+                            f"NWB Inspector version {current_version} is installed - "
+                            f"please use the latest release of the NWB Inspector ({max_version}) when "
                             "performing `dandi validate`. "
                             "To update, please run `pip install -U nwbinspector`."
                         ]
