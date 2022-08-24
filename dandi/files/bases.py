@@ -483,7 +483,10 @@ class NWBAsset(LocalFileAsset):
                 is_latest = self._check_latest_inspector_version()
                 if not is_latest:
                     errors.extend(
-                        ["Please use the latest release of the NWB Inspector when performing `dandi validate`."]
+                        [
+                            "Please use the latest release of the NWB Inspector when performing `dandi validate`. "
+                            "To update, please run `pip install -U nwbinspector`."
+                        ]
                     )
                     return errors
 
