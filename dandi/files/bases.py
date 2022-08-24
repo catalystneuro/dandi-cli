@@ -461,7 +461,7 @@ class NWBAsset(LocalFileAsset):
         data = json.loads(requests.get(url=url).text)
         versions = data["releases"].keys()
         max_version = max(versions, key=lambda x: version.Version(x))
-        return get_package_version(package_name="nwbinspector") == max_version
+        return get_package_version(name="nwbinspector") == max_version
 
     # TODO: @validate_cache.memoize_path
     def get_validation_errors(
