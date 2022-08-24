@@ -484,13 +484,15 @@ class NWBAsset(LocalFileAsset):
                 if not is_latest:
                     errors.extend(
                         [
-                            "Please use the latest release of the NWB Inspector when performing `dandi validate`. "
+                            "Please use the latest release of the NWB Inspector when "
+                            "performing `dandi validate`. "
                             "To update, please run `pip install -U nwbinspector`."
                         ]
                     )
                     return errors
 
-                # Run NWB Inspector with 'dandi' config - CRITICAL errors and above are equivalent to validation errors
+                # Run NWB Inspector with 'dandi' config
+                # CRITICAL errors and above are equivalent to validation errors
                 errors.extend(
                     [
                         error.message
