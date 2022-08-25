@@ -482,7 +482,7 @@ class NWBAsset(LocalFileAsset):
             try:
                 # Ensure latest version of NWB Inspector is installed and used client-side
                 current_version, max_version = self._get_inspector_versions()
-                if current_version != max_version:
+                if current_version < max_version:
                     errors.extend(
                         [
                             f"NWB Inspector version {current_version} is installed - please "
