@@ -80,6 +80,11 @@ jobs:
       run: |
         pip install git+https://github.com/NeurodataWithoutBorders/pynwb
 
+    - name: Install dev version of nwbinspector
+      if: matrix.mode == 'dev-deps'
+      run: |
+        pip install git+https://github.com/NeurodataWithoutBorders/nwbinspector
+
     - name: Run all tests
       if: matrix.mode != 'dandi-api'
       run: |
